@@ -1,13 +1,13 @@
-
 import React, { useRef, useState } from 'react';
 import { TransformerConfig } from '../types';
-import { Filter, Upload, FileSpreadsheet, Link as LinkIcon, Check, Pencil, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
+import { Filter, Upload, FileSpreadsheet, Link as LinkIcon, Check, Pencil, ChevronLeft, ChevronRight, Zap, XCircle } from 'lucide-react';
 
 interface SidebarProps {
   transformers: TransformerConfig[];
   selectedIds: string[];
   onToggle: (id: string) => void;
   onSelectAll: () => void;
+  onDeselectAll: () => void;
   onFileUpload: (file: File) => void;
   currentUrl: string;
   onUrlChange: (url: string) => void;
@@ -21,6 +21,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     selectedIds, 
     onToggle, 
     onSelectAll,
+    onDeselectAll,
     onFileUpload,
     currentUrl,
     onUrlChange,
@@ -52,7 +53,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         ${isOpen ? 'w-64 translate-x-0' : 'w-0 lg:w-16 -translate-x-full lg:translate-x-0'}
       `}
     >
-      {/* Desktop Toggle Arrow */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
         className="hidden lg:flex absolute top-1/2 -right-4 translate-y-[-50%] w-8 h-8 bg-[#464B5C] hover:bg-[#5a6075] text-white rounded-full items-center justify-center shadow-lg border border-[#262730] z-50 transition-colors"
@@ -60,10 +60,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         {isOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
       </button>
 
-      {/* Content Container - Hidden when fully closed or narrow on desktop */}
       <div className={`flex flex-col h-full transition-opacity duration-200 ${isOpen ? 'opacity-100 p-6' : 'opacity-0 overflow-hidden'}`}>
         
-        {/* Header/Logo (Optional icon for narrow mode could go here, but user asked for arrow) */}
         <div className="mb-8 shrink-0 flex items-center gap-3">
           <div className="bg-yellow-500/10 p-2 rounded text-yellow-500">
             <Zap size={20} />
@@ -71,7 +69,6 @@ const Sidebar: React.FC<SidebarProps> = ({
           <h1 className="text-[#FAFAFA] text-lg font-bold truncate">TR Monitor</h1>
         </div>
 
-        {/* 데이터 소스 섹션 */}
         <div className="mb-10 shrink-0">
           <h2 className="text-[#FAFAFA] text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest opacity-80">
               <FileSpreadsheet size={16} />
@@ -119,8 +116,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* 필터 섹션 */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="flex justify-between items-center mb-4 shrink-0">
               <div className="flex items-center gap-2">
                   <h2 className="text-[#FAFAFA] text-sm font-bold flex items-center gap-2 uppercase tracking-widest opacity-80">
@@ -130,16 +126,25 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <button 
                       onClick={() => setIsEditing(!isEditing)}
                       className={`p-1 rounded transition-colors ${isEditing ? 'text-green-400 bg-green-400/10' : 'text-gray-400 hover:bg-[#363945]'}`}
+                      title="라벨 편집"
                   >
                       {isEditing ? <Check size={14} /> : <Pencil size={14} />}
                   </button>
               </div>
-              <button 
-                  onClick={onSelectAll}
-                  className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors font-black uppercase"
-              >
-                  Select All
-              </button>
+              <div className="flex gap-2">
+                <button 
+                    onClick={onSelectAll}
+                    className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors font-black uppercase"
+                >
+                    ALL
+                </button>
+                <button 
+                    onClick={onDeselectAll}
+                    className="text-[10px] text-red-400 hover:text-red-300 transition-colors font-black uppercase"
+                >
+                    NONE
+                </button>
+              </div>
           </div>
           
           <div className="grid grid-cols-2 gap-2 overflow-y-auto pr-1 scrollbar-thin content-start pb-4">
@@ -154,13 +159,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                           relative group flex items-center justify-center rounded border text-xs transition-all text-center
                           min-h-[44px] cursor-pointer overflow-hidden
                           ${isSelected 
-                              ? 'text-white shadow-md font-black ring-1 ring-white/10' 
+                              ? 'text-white shadow-md font-black ring-1 ring-white/20' 
                               : 'bg-[#1e1e1e] text-gray-500 border-[#464B5C] hover:border-gray-400 hover:text-gray-300'
                           }
                       `}
                       style={isSelected ? { 
-                          backgroundColor: tr.fillColor.replace('0.2', '0.6'),
-                          borderColor: tr.color 
+                          backgroundColor: tr.fillColor.replace('0.2', '0.75'),
+                          borderColor: tr.color,
+                          boxShadow: `inset 0 0 12px ${tr.color}44`
                       } : {}}
                       onClick={() => !isEditing && onToggle(tr.id)}
                   >
@@ -170,11 +176,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                               value={tr.name}
                               onChange={(e) => onLabelChange(tr.id, e.target.value)}
                               onClick={(e) => e.stopPropagation()}
-                              className="w-full bg-transparent text-center focus:outline-none focus:bg-black/20 rounded py-2 px-1 text-white placeholder-gray-500 font-bold"
+                              className="w-full h-full bg-transparent text-center focus:outline-none focus:bg-black/40 rounded py-2 px-1 text-white placeholder-gray-500 font-bold"
+                              autoFocus
                           />
                       ) : (
-                          <div className="w-full h-full flex items-center justify-center py-2 px-1 truncate font-black tracking-tighter">
+                          <div className="w-full h-full flex items-center justify-center py-2 px-1 truncate font-black tracking-tighter uppercase">
                               {displayName}
+                          </div>
+                      )}
+                      
+                      {isSelected && !isEditing && (
+                          <div className="absolute top-0 right-0 p-0.5">
+                              <Check size={8} className="text-white opacity-60" />
                           </div>
                       )}
                   </div>
@@ -190,7 +203,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Narrow Mode Indicator (Visible when lg and closed) */}
       {!isOpen && (
         <div className="hidden lg:flex flex-col items-center pt-8 gap-8 overflow-hidden opacity-40">
            <Zap size={24} className="text-yellow-500" />
