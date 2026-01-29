@@ -1,0 +1,7 @@
+{
+  "name": "Transformer Monitor",
+  "description": "A dark-mode dashboard for monitoring transformer temperatures with real-time analytics and visualizations.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
