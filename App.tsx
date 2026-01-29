@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { fetchTransformerData, parseCSVData } from './utils/dataGenerator';
 import { TransformerDataPoint, TransformerConfig, CHART_PALETTE } from './types';
 import Sidebar from './components/Sidebar';
@@ -11,12 +11,17 @@ import { Zap, Activity, Loader2, RefreshCw, Play, Pause, LayoutGrid, List, Downl
 const DEFAULT_SHEET_URL = `https://docs.google.com/spreadsheets/d/1K8w405s3SthSLFbYdYT1PAnpnuzGMUOl0qxQDSiCKs8/export?format=csv&gid=69853061`;
 
 const App: React.FC = () => {
+  // --- 1. State Declarations (Must come first to avoid ReferenceErrors) ---
   const [data, setData] = useState<TransformerDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<'cloud' | 'local'>('cloud');
   const [isAutoRefresh, setIsAutoRefresh] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [selectedTRs, setSelectedTRs] = useState<string[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   const [transformers, setTransformers] = useState<TransformerConfig[]>([]);
   const [customLabels, setCustomLabels] = useState<Record<string, string>>(() => {
@@ -29,24 +34,6 @@ const App: React.FC = () => {
     return {};
   });
 
-  const handleLabelChange = (id: string, newLabel: string) => {
-    setCustomLabels(prev => {
-        const next = { ...prev, [id]: newLabel };
-        localStorage.setItem('transformer_custom_labels', JSON.stringify(next));
-        return next;
-    });
-  };
-
-  const displayTransformers = useMemo(() => {
-    return transformers.map(t => ({
-        ...t,
-        name: customLabels[t.id] || t.name
-    }));
-  }, [transformers, customLabels]);
-  
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  
   const [startYear, setStartYear] = useState<string>('All');
   const [startMonth, setStartMonth] = useState<string>('All');
   const [endYear, setEndYear] = useState<string>('All');
@@ -55,9 +42,34 @@ const App: React.FC = () => {
   const [csvUrl, setCsvUrl] = useState<string>(() => {
     return localStorage.getItem('transformer_monitor_url') || DEFAULT_SHEET_URL;
   });
-  
-  const [selectedTRs, setSelectedTRs] = useState<string[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // --- 2. Derived State (useMemo) ---
+  const displayTransformers = useMemo(() => {
+    return transformers.map(t => ({
+        ...t,
+        name: customLabels[t.id] || t.name
+    }));
+  }, [transformers, customLabels]);
+
+  const singleSelectedTr = useMemo(() => {
+    return displayTransformers.find(t => t.id === focusedId);
+  }, [displayTransformers, focusedId]);
+
+  const transformersToDisplay = useMemo(() => {
+    if (focusedId) {
+      return displayTransformers.filter(t => t.id === focusedId);
+    }
+    return displayTransformers.filter(t => selectedTRs.includes(t.id));
+  }, [displayTransformers, selectedTRs, focusedId]);
+
+  // --- 3. Logic & Handlers ---
+  const handleLabelChange = (id: string, newLabel: string) => {
+    setCustomLabels(prev => {
+        const next = { ...prev, [id]: newLabel };
+        localStorage.setItem('transformer_custom_labels', JSON.stringify(next));
+        return next;
+    });
+  };
 
   const updateTransformersFromData = (dataPoints: TransformerDataPoint[]) => {
     if (dataPoints.length === 0) return;
@@ -248,15 +260,6 @@ const App: React.FC = () => {
       </>
   );
 
-  const singleSelectedTr = focusedId ? displayTransformers.find(t => t.id === focusedId) : null;
-
-  const transformersToDisplay = useMemo(() => {
-    if (viewMode === 'list' && focusedId) {
-        return displayTransformers.filter(t => t.id === focusedId);
-    }
-    return displayTransformers.filter(tr => selectedTRs.includes(tr.id));
-  }, [viewMode, focusedId, displayTransformers, selectedTRs]);
-
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-[#0E1117] text-[#FAFAFA] font-sans overflow-hidden">
       {/* Mobile Header */}
@@ -287,7 +290,7 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-1">
                     <h1 className="text-xl lg:text-2xl font-bold flex items-center gap-2">
                         <span className="bg-yellow-500/10 p-1.5 rounded-lg text-yellow-500"><Zap size={22} /></span>
-                        {singleSelectedTr ? `${singleSelectedTr.name} 상세 분석` : '변압기(TR) 온도 통합 관제'}
+                        {focusedId ? `${singleSelectedTr?.name} 상세 분석` : '변압기(TR) 온도 통합 관제'}
                     </h1>
                     <div className="flex items-center gap-3 ml-1">
                         <p className="text-gray-400 flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider">
@@ -297,7 +300,6 @@ const App: React.FC = () => {
                         <p className="text-gray-500 text-[10px] font-bold uppercase flex items-center gap-1.5" title="Total records in current view">
                             <Database size={10} /> {filteredData.length} Records
                         </p>
-                        {isAutoRefresh && <span className="flex items-center gap-1 text-[10px] text-yellow-500 animate-pulse font-bold"><span className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></span>LIVE</span>}
                     </div>
                 </div>
                 
@@ -335,9 +337,11 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 pr-2 scrollbar-thin">
-            {isLoading && <div className="flex flex-col items-center justify-center py-20 text-gray-500"><Loader2 size={48} className="animate-spin mb-4 text-blue-500" /><p>데이터를 불러오는 중입니다...</p></div>}
-            {!isLoading && error && <div className="bg-red-900/20 border border-red-800 text-red-200 p-6 rounded-lg text-center mb-8"><p className="font-bold mb-2">데이터 로드 실패</p><p className="text-sm opacity-90 mb-4">{error}</p></div>}
-            {!isLoading && !error && (
+            {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 text-gray-500"><Loader2 size={48} className="animate-spin mb-4 text-blue-500" /><p>데이터를 불러오는 중입니다...</p></div>
+            ) : error ? (
+                <div className="bg-red-900/20 border border-red-800 text-red-200 p-6 rounded-lg text-center mb-8"><p className="font-bold mb-2">데이터 로드 실패</p><p className="text-sm opacity-90 mb-4">{error}</p></div>
+            ) : (
                 <>
                     {systemKPIs && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
