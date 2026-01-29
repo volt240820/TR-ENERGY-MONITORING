@@ -1,5 +1,4 @@
-
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { fetchTransformerData, parseCSVData } from './utils/dataGenerator';
 import { TransformerDataPoint, TransformerConfig, CHART_PALETTE } from './types';
 import Sidebar from './components/Sidebar';
@@ -7,7 +6,7 @@ import KPICard from './components/KPICard';
 import TransformerRow from './components/TransformerRow';
 import TransformerGridCard from './components/TransformerGridCard';
 import WeatherWidget from './components/WeatherWidget';
-import { Zap, Activity, Loader2, RefreshCw, Play, Pause, LayoutGrid, List, ArrowRight } from 'lucide-react';
+import { Zap, Activity, Loader2, RefreshCw, Play, Pause, LayoutGrid, List, Download, Database } from 'lucide-react';
 
 const DEFAULT_SHEET_URL = `https://docs.google.com/spreadsheets/d/1K8w405s3SthSLFbYdYT1PAnpnuzGMUOl0qxQDSiCKs8/export?format=csv&gid=69853061`;
 
@@ -197,6 +196,7 @@ const App: React.FC = () => {
   };
 
   const selectAll = () => setSelectedTRs(transformers.map(t => t.id));
+  const deselectAll = () => setSelectedTRs([]);
 
   const handleGridCardClick = (id: string) => {
     setFocusedId(id);
@@ -211,6 +211,27 @@ const App: React.FC = () => {
   const switchToListView = () => {
     setFocusedId(null);
     setViewMode('list');
+  };
+
+  const handleExportCSV = () => {
+    if (filteredData.length === 0) return;
+    const headers = Object.keys(filteredData[0]);
+    const csvContent = [
+      headers.join(','),
+      ...filteredData.map(row => headers.map(h => {
+          const val = row[h];
+          return typeof val === 'string' && val.includes(',') ? `"${val}"` : val;
+      }).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `tr_monitor_export_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const yearOptions = (
@@ -246,12 +267,12 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Sidebar Component with Collapsible Logic */}
       <Sidebar 
           transformers={displayTransformers}
           selectedIds={selectedTRs}
           onToggle={toggleTR}
           onSelectAll={selectAll}
+          onDeselectAll={deselectAll}
           onFileUpload={handleFileUpload}
           currentUrl={csvUrl}
           onUrlChange={handleUrlChange}
@@ -268,9 +289,13 @@ const App: React.FC = () => {
                         <span className="bg-yellow-500/10 p-1.5 rounded-lg text-yellow-500"><Zap size={22} /></span>
                         {singleSelectedTr ? `${singleSelectedTr.name} 상세 분석` : '변압기(TR) 온도 통합 관제'}
                     </h1>
-                    <div className="flex items-center gap-2 ml-1">
+                    <div className="flex items-center gap-3 ml-1">
                         <p className="text-gray-400 flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider">
                             {dataSource === 'local' ? (<span className="text-green-400">Local Mode</span>) : (<span className="text-blue-400">Cloud Mode</span>)}
+                        </p>
+                        <div className="h-3 w-[1px] bg-gray-700"></div>
+                        <p className="text-gray-500 text-[10px] font-bold uppercase flex items-center gap-1.5" title="Total records in current view">
+                            <Database size={10} /> {filteredData.length} Records
                         </p>
                         {isAutoRefresh && <span className="flex items-center gap-1 text-[10px] text-yellow-500 animate-pulse font-bold"><span className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></span>LIVE</span>}
                     </div>
@@ -289,6 +314,15 @@ const App: React.FC = () => {
                         <button onClick={switchToGridView} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /></button>
                         <button onClick={switchToListView} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}><List size={16} /></button>
                     </div>
+
+                    <button 
+                        onClick={handleExportCSV}
+                        className="flex items-center justify-center gap-2 bg-[#262730] hover:bg-[#363945] border border-[#464B5C] px-3 h-8 rounded text-xs font-bold text-gray-300 transition-colors shadow-sm"
+                        title="Download Filtered Data as CSV"
+                    >
+                        <Download size={14} className="text-blue-400" />
+                        Export
+                    </button>
                     
                     {dataSource === 'cloud' && (
                         <div className="flex items-center gap-1">
@@ -317,7 +351,7 @@ const App: React.FC = () => {
                     {displayTransformers.length === 0 ? (
                         <div className="text-center py-20 text-gray-500 border border-dashed border-[#464B5C] rounded-lg"><Activity size={48} className="mx-auto mb-4 opacity-50" /><p>표시할 데이터 컬럼을 찾을 수 없습니다.</p></div>
                     ) : selectedTRs.length === 0 && !focusedId ? (
-                         <div className="text-center py-20 text-gray-500 border border-dashed border-[#464B5C] rounded-lg"><Activity size={48} className="mx-auto mb-4 opacity-50" /><p>선택된 변압기가 없습니다.</p></div>
+                         <div className="text-center py-20 text-gray-500 border border-dashed border-[#464B5C] rounded-lg"><Activity size={48} className="mx-auto mb-4 opacity-50" /><p>선택된 변압기가 없습니다. 왼쪽 사이드바에서 선택해 주세요.</p></div>
                     ) : (
                         <>
                             {viewMode === 'grid' ? (
