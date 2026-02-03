@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { fetchTransformerData, parseCSVData } from './utils/dataGenerator';
 import { TransformerDataPoint, TransformerConfig, CHART_PALETTE } from './types';
@@ -11,7 +12,7 @@ import { Zap, Activity, Loader2, RefreshCw, Play, Pause, LayoutGrid, List, Downl
 const DEFAULT_SHEET_URL = `https://docs.google.com/spreadsheets/d/1K8w405s3SthSLFbYdYT1PAnpnuzGMUOl0qxQDSiCKs8/export?format=csv&gid=69853061`;
 
 const App: React.FC = () => {
-  // --- 1. State Declarations (Must come first to avoid ReferenceErrors) ---
+  // --- 1. State Declarations (최상단에 배치하여 ReferenceError 방지) ---
   const [data, setData] = useState<TransformerDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isValidating, setIsValidating] = useState(false);
@@ -22,8 +23,13 @@ const App: React.FC = () => {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [selectedTRs, setSelectedTRs] = useState<string[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  
   const [transformers, setTransformers] = useState<TransformerConfig[]>([]);
+  
+  const [startYear, setStartYear] = useState<string>('All');
+  const [startMonth, setStartMonth] = useState<string>('All');
+  const [endYear, setEndYear] = useState<string>('All');
+  const [endMonth, setEndMonth] = useState<string>('All');
+  
   const [customLabels, setCustomLabels] = useState<Record<string, string>>(() => {
     if (typeof window !== 'undefined') {
         try {
@@ -34,16 +40,14 @@ const App: React.FC = () => {
     return {};
   });
 
-  const [startYear, setStartYear] = useState<string>('All');
-  const [startMonth, setStartMonth] = useState<string>('All');
-  const [endYear, setEndYear] = useState<string>('All');
-  const [endMonth, setEndMonth] = useState<string>('All');
-  
   const [csvUrl, setCsvUrl] = useState<string>(() => {
-    return localStorage.getItem('transformer_monitor_url') || DEFAULT_SHEET_URL;
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('transformer_monitor_url') || DEFAULT_SHEET_URL;
+    }
+    return DEFAULT_SHEET_URL;
   });
 
-  // --- 2. Derived State (useMemo) ---
+  // --- 2. Derived State (useMemo) - 상태 선언 이후에 정의 ---
   const displayTransformers = useMemo(() => {
     return transformers.map(t => ({
         ...t,
@@ -62,7 +66,7 @@ const App: React.FC = () => {
     return displayTransformers.filter(t => selectedTRs.includes(t.id));
   }, [displayTransformers, selectedTRs, focusedId]);
 
-  // --- 3. Logic & Handlers ---
+  // --- 3. Handlers & Effects ---
   const handleLabelChange = (id: string, newLabel: string) => {
     setCustomLabels(prev => {
         const next = { ...prev, [id]: newLabel };
@@ -121,33 +125,22 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUrlChange = (newUrl: string) => {
-    setCsvUrl(newUrl);
-    localStorage.setItem('transformer_monitor_url', newUrl);
-    setTimeout(() => loadCloudData(false), 100);
-  };
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (dataSource === 'cloud' && isAutoRefresh) {
-      interval = setInterval(() => loadCloudData(true), 30000);
-    }
-    return () => { if (interval) clearInterval(interval); };
-  }, [dataSource, isAutoRefresh, csvUrl]);
-
+  // Fix: Added handleFileUpload function to handle CSV file uploads
   const handleFileUpload = (file: File) => {
-    setIsLoading(true);
-    setError(null);
-    setDataSource('local');
-    setIsAutoRefresh(false);
     const reader = new FileReader();
     reader.onload = (e) => {
-        try {
-            const text = e.target?.result as string;
-            const result = parseCSVData(text);
-            if (result.length === 0) setError("데이터가 없습니다.");
-            else { setData(result); updateTransformersFromData(result); }
-        } catch { setError("오류 발생"); } finally { setIsLoading(false); }
+      const text = e.target?.result;
+      if (typeof text === 'string') {
+        const result = parseCSVData(text);
+        if (result.length > 0) {
+          setData(result);
+          updateTransformersFromData(result);
+          setDataSource('local');
+          setError(null);
+        } else {
+          setError("CSV 파일에 유효한 데이터가 없습니다.");
+        }
+      }
     };
     reader.readAsText(file);
   };
@@ -203,28 +196,6 @@ const App: React.FC = () => {
     return { avgNow, avgDelta: prevRow ? avgNow - avgPrev : 0, maxTemp: maxTemp === -Infinity ? null : maxTemp, maxTrName, activeCount: validValuesNow.length, warningCount };
   }, [filteredData, transformers, displayTransformers]);
 
-  const toggleTR = (id: string) => {
-    setSelectedTRs(prev => prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id]);
-  };
-
-  const selectAll = () => setSelectedTRs(transformers.map(t => t.id));
-  const deselectAll = () => setSelectedTRs([]);
-
-  const handleGridCardClick = (id: string) => {
-    setFocusedId(id);
-    setViewMode('list');
-  };
-
-  const switchToGridView = () => {
-    setFocusedId(null);
-    setViewMode('grid');
-  };
-
-  const switchToListView = () => {
-    setFocusedId(null);
-    setViewMode('list');
-  };
-
   const handleExportCSV = () => {
     if (filteredData.length === 0) return;
     const headers = Object.keys(filteredData[0]);
@@ -246,39 +217,17 @@ const App: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const yearOptions = (
-      <>
-          <option value="All" className="text-black">전체</option>
-          {availableYears.map(y => <option key={y} value={y} className="text-black">{y}년</option>)}
-      </>
-  );
-
-  const monthOptions = (
-      <>
-          <option value="All" className="text-black">전체</option>
-          {Array.from({length: 12}, (_, i) => i + 1).map(m => (<option key={m} value={m.toString()} className="text-black">{m}월</option>))}
-      </>
-  );
-
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-[#0E1117] text-[#FAFAFA] font-sans overflow-hidden">
-      {/* Mobile Header */}
-      <div className="lg:hidden flex items-center justify-between p-4 bg-[#262730] shrink-0 border-b border-[#464B5C]">
-        <h1 className="text-lg font-bold flex items-center gap-2"><Zap className="text-yellow-500" />TR Monitor</h1>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 border border-gray-600 rounded">
-          <Activity size={20} />
-        </button>
-      </div>
-
       <Sidebar 
           transformers={displayTransformers}
           selectedIds={selectedTRs}
-          onToggle={toggleTR}
-          onSelectAll={selectAll}
-          onDeselectAll={deselectAll}
+          onToggle={(id) => setSelectedTRs(prev => prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id])}
+          onSelectAll={() => setSelectedTRs(transformers.map(t => t.id))}
+          onDeselectAll={() => setSelectedTRs([])}
           onFileUpload={handleFileUpload}
           currentUrl={csvUrl}
-          onUrlChange={handleUrlChange}
+          onUrlChange={(newUrl) => { setCsvUrl(newUrl); localStorage.setItem('transformer_monitor_url', newUrl); setTimeout(() => loadCloudData(false), 100); }}
           onLabelChange={handleLabelChange}
           isOpen={isSidebarOpen}
           setIsOpen={setIsSidebarOpen}
@@ -292,96 +241,72 @@ const App: React.FC = () => {
                         <span className="bg-yellow-500/10 p-1.5 rounded-lg text-yellow-500"><Zap size={22} /></span>
                         {focusedId ? `${singleSelectedTr?.name} 상세 분석` : '변압기(TR) 온도 통합 관제'}
                     </h1>
-                    <div className="flex items-center gap-3 ml-1">
-                        <p className="text-gray-400 flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider">
-                            {dataSource === 'local' ? (<span className="text-green-400">Local Mode</span>) : (<span className="text-blue-400">Cloud Mode</span>)}
-                        </p>
-                        <div className="h-3 w-[1px] bg-gray-700"></div>
-                        <p className="text-gray-500 text-[10px] font-bold uppercase flex items-center gap-1.5" title="Total records in current view">
-                            <Database size={10} /> {filteredData.length} Records
-                        </p>
+                    <div className="flex items-center gap-3 ml-1 text-gray-500 text-[10px] font-bold uppercase">
+                        {dataSource === 'cloud' ? <span className="text-blue-400">Cloud Mode</span> : <span className="text-green-400">Local Mode</span>}
+                        <div className="h-2 w-[1px] bg-gray-700"></div>
+                        <Database size={10} /> {filteredData.length} Records
                     </div>
                 </div>
                 
-                <div className="flex flex-wrap items-center gap-2 justify-end w-full xl:w-auto">
+                <div className="flex flex-wrap items-center gap-2">
                     <WeatherWidget />
                     
                     <div className="flex items-center gap-1.5 bg-[#262730] p-1 rounded-lg border border-[#464B5C] text-xs">
-                        <div className="flex items-center"><select value={startYear} onChange={(e) => setStartYear(e.target.value)} className="bg-transparent text-[#FAFAFA] border-none focus:ring-0 outline-none p-1 cursor-pointer hover:text-blue-400">{yearOptions}</select><span className="text-gray-500">.</span><select value={startMonth} onChange={(e) => setStartMonth(e.target.value)} className="bg-transparent text-[#FAFAFA] border-none focus:ring-0 outline-none p-1 cursor-pointer hover:text-blue-400">{monthOptions}</select></div>
-                        <span className="text-gray-500 px-1">~</span>
-                        <div className="flex items-center"><select value={endYear} onChange={(e) => setEndYear(e.target.value)} className="bg-transparent text-[#FAFAFA] border-none focus:ring-0 outline-none p-1 cursor-pointer hover:text-blue-400">{yearOptions}</select><span className="text-gray-500">.</span><select value={endMonth} onChange={(e) => setEndMonth(e.target.value)} className="bg-transparent text-[#FAFAFA] border-none focus:ring-0 outline-none p-1 cursor-pointer hover:text-blue-400">{monthOptions}</select></div>
+                        <select value={startYear} onChange={(e) => setStartYear(e.target.value)} className="bg-transparent border-none outline-none cursor-pointer hover:text-blue-400">
+                            <option value="All" className="text-black">전체</option>
+                            {availableYears.map(y => <option key={y} value={y} className="text-black">{y}년</option>)}
+                        </select>
+                        <span className="text-gray-500">~</span>
+                        <select value={endYear} onChange={(e) => setEndYear(e.target.value)} className="bg-transparent border-none outline-none cursor-pointer hover:text-blue-400">
+                            <option value="All" className="text-black">전체</option>
+                            {availableYears.map(y => <option key={y} value={y} className="text-black">{y}년</option>)}
+                        </select>
                     </div>
 
                     <div className="flex bg-[#262730] p-1 rounded-lg border border-[#464B5C]">
-                        <button onClick={switchToGridView} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /></button>
-                        <button onClick={switchToListView} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}><List size={16} /></button>
+                        <button onClick={() => {setFocusedId(null); setViewMode('grid');}} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /></button>
+                        <button onClick={() => {setFocusedId(null); setViewMode('list');}} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}><List size={16} /></button>
                     </div>
 
-                    <button 
-                        onClick={handleExportCSV}
-                        className="flex items-center justify-center gap-2 bg-[#262730] hover:bg-[#363945] border border-[#464B5C] px-3 h-8 rounded text-xs font-bold text-gray-300 transition-colors shadow-sm"
-                        title="Download Filtered Data as CSV"
-                    >
-                        <Download size={14} className="text-blue-400" />
-                        Export
+                    <button onClick={handleExportCSV} className="flex items-center gap-2 bg-[#262730] hover:bg-[#363945] border border-[#464B5C] px-3 h-8 rounded text-xs font-bold text-gray-300 transition-colors">
+                        <Download size={14} className="text-blue-400" /> Export
                     </button>
                     
                     {dataSource === 'cloud' && (
-                        <div className="flex items-center gap-1">
-                            <button onClick={() => setIsAutoRefresh(!isAutoRefresh)} className={`flex items-center justify-center w-8 h-8 rounded transition-colors border ${isAutoRefresh ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-500' : 'bg-[#262730] border-[#464B5C] text-gray-400 hover:text-gray-200'}`} title="Auto Refresh">{isAutoRefresh ? <Pause size={14} /> : <Play size={14} />}</button>
-                            <button onClick={() => loadCloudData(false)} disabled={isLoading || isValidating} className="flex items-center justify-center w-8 h-8 bg-[#262730] hover:bg-[#363945] border border-[#464B5C] rounded transition-colors disabled:opacity-50" title="Refresh Now">{(isLoading || isValidating) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}</button>
-                        </div>
+                        <button onClick={() => loadCloudData(false)} disabled={isLoading || isValidating} className="w-8 h-8 bg-[#262730] hover:bg-[#363945] border border-[#464B5C] rounded flex items-center justify-center">
+                            {(isLoading || isValidating) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        </button>
                     )}
                 </div>
             </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto min-h-0 pr-2 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
             {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 text-gray-500"><Loader2 size={48} className="animate-spin mb-4 text-blue-500" /><p>데이터를 불러오는 중입니다...</p></div>
-            ) : error ? (
-                <div className="bg-red-900/20 border border-red-800 text-red-200 p-6 rounded-lg text-center mb-8"><p className="font-bold mb-2">데이터 로드 실패</p><p className="text-sm opacity-90 mb-4">{error}</p></div>
+                <div className="flex flex-col items-center justify-center py-20 text-gray-500"><Loader2 size={48} className="animate-spin mb-4 text-blue-500" /><p>데이터 로딩 중...</p></div>
             ) : (
                 <>
                     {systemKPIs && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <KPICard label="기간 평균 온도" value={`${systemKPIs.avgNow.toFixed(1)}°C`} delta={`${systemKPIs.avgDelta > 0 ? '+' : ''}${systemKPIs.avgDelta.toFixed(1)}°C`} deltaColor="inverse" />
-                            <KPICard label="최고 온도 (Hot Spot)" value={systemKPIs.maxTemp !== null ? `${systemKPIs.maxTemp.toFixed(1)}°C` : '-'} subtext={systemKPIs.maxTrName} deltaColor="inverse" />
-                            <KPICard label="모니터링 대상" value={`${systemKPIs.activeCount} 대`} subtext="데이터 수신 중" deltaColor="off" />
-                            <KPICard label="현재 상태" value={systemKPIs.warningCount === 0 ? "정상" : "주의"} subtext={`경보 ${systemKPIs.warningCount}건`} deltaColor={systemKPIs.warningCount === 0 ? 'off' : 'inverse'} />
+                            <KPICard label="평균 온도" value={`${systemKPIs.avgNow.toFixed(1)}°C`} delta={`${systemKPIs.avgDelta.toFixed(1)}°C`} deltaColor="inverse" />
+                            <KPICard label="최고 지점" value={`${systemKPIs.maxTemp?.toFixed(1)}°C`} subtext={systemKPIs.maxTrName} deltaColor="inverse" />
+                            <KPICard label="관찰 대상" value={`${systemKPIs.activeCount}대`} deltaColor="off" />
+                            <KPICard label="시스템 상태" value={systemKPIs.warningCount === 0 ? "정상" : "주의"} subtext={`경보 ${systemKPIs.warningCount}건`} deltaColor="off" />
                         </div>
                     )}
 
-                    {displayTransformers.length === 0 ? (
-                        <div className="text-center py-20 text-gray-500 border border-dashed border-[#464B5C] rounded-lg"><Activity size={48} className="mx-auto mb-4 opacity-50" /><p>표시할 데이터 컬럼을 찾을 수 없습니다.</p></div>
-                    ) : selectedTRs.length === 0 && !focusedId ? (
-                         <div className="text-center py-20 text-gray-500 border border-dashed border-[#464B5C] rounded-lg"><Activity size={48} className="mx-auto mb-4 opacity-50" /><p>선택된 변압기가 없습니다. 왼쪽 사이드바에서 선택해 주세요.</p></div>
+                    {viewMode === 'grid' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-10">
+                            {transformersToDisplay.map(tr => (
+                                <TransformerGridCard key={tr.id} config={tr} data={filteredData} onClick={() => {setFocusedId(tr.id); setViewMode('list');}} />
+                            ))}
+                        </div>
                     ) : (
-                        <>
-                            {viewMode === 'grid' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-10">
-                                    {transformersToDisplay.map(tr => (
-                                        <TransformerGridCard 
-                                            key={tr.id}
-                                            config={tr}
-                                            data={filteredData}
-                                            onClick={() => handleGridCardClick(tr.id)}
-                                        />
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="space-y-6 pb-10">
-                                    {transformersToDisplay.map(tr => (
-                                        <TransformerRow 
-                                            key={tr.id}
-                                            config={tr}
-                                            data={filteredData}
-                                            onBack={focusedId ? switchToGridView : undefined}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </>
+                        <div className="space-y-6 pb-10">
+                            {transformersToDisplay.map(tr => (
+                                <TransformerRow key={tr.id} config={tr} data={filteredData} onBack={focusedId ? () => {setFocusedId(null); setViewMode('grid');} : undefined} />
+                            ))}
+                        </div>
                     )}
                 </>
             )}
