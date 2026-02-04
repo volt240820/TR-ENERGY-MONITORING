@@ -10,7 +10,6 @@ import { Zap, Activity, Loader2, RefreshCw, Play, Pause, LayoutGrid, List, Downl
 
 const DEFAULT_SHEET_URL = `https://docs.google.com/spreadsheets/d/1K8w405s3SthSLFbYdYT1PAnpnuzGMUOl0qxQDSiCKs8/export?format=csv&gid=69853061`;
 
-// --- i18n Translations ---
 const translations = {
   ko: {
     title: '변압기(TR) 온도 통합 관제',
@@ -32,82 +31,81 @@ const translations = {
     alarm: '경보',
     noTrSelected: '선택된 변압기가 없습니다. 왼쪽 사이드바에서 선택해 주세요.',
     noData: '표시할 데이터가 없습니다.',
-    autoRefresh: '자동 새로고침',
-    manualRefresh: '수동 새로고침'
+    autoRefresh: '자동 갱신',
+    manualRefresh: '수동 갱신'
   },
   en: {
-    title: 'Transformer Temperature Monitoring',
-    detailed: 'Detailed Analysis',
-    cloud: 'Cloud Mode',
-    local: 'Local Mode',
-    records: 'Records',
+    title: 'Transformer Temp Monitor',
+    detailed: 'Detail',
+    cloud: 'Cloud',
+    local: 'Local',
+    records: 'Recs',
     all: 'All',
     year: 'Y',
     month: 'M',
     export: 'Export',
-    loading: 'Loading data...',
+    loading: 'Loading...',
     avgTemp: 'Avg Temp',
     hotSpot: 'Hot Spot',
     monitored: 'Monitored',
-    status: 'System Status',
+    status: 'Status',
     normal: 'Secure',
     warning: 'Warning',
     alarm: 'Alarm',
-    noTrSelected: 'No transformers selected. Please select from the sidebar.',
-    noData: 'No data available to display.',
+    noTrSelected: 'No transformers selected.',
+    noData: 'No data available.',
     autoRefresh: 'Auto Refresh',
-    manualRefresh: 'Manual Refresh'
+    manualRefresh: 'Refresh Now'
   },
   jp: {
-    title: '変圧器(TR)温度統合監視',
-    detailed: '詳細分析',
-    cloud: 'クラウドモード',
-    local: 'ローカルモード',
-    records: 'レコード',
+    title: '変圧器温度監視',
+    detailed: '詳細',
+    cloud: 'クラウド',
+    local: 'ローカル',
+    records: '件',
     all: 'すべて',
     year: '年',
     month: '月',
     export: '出力',
-    loading: 'データ読込中...',
+    loading: '読込中...',
     avgTemp: '平均温度',
-    hotSpot: '最高温度点',
-    monitored: '監視対象',
-    status: 'システム状態',
+    hotSpot: '最高温度',
+    monitored: '監視台数',
+    status: '状態',
     normal: '正常',
     warning: '注意',
     alarm: '警告',
-    noTrSelected: '選択された変圧器がありません。サイドバーから選択してください。',
-    noData: '表示するデータがありません。',
+    noTrSelected: '変圧器を選択してください。',
+    noData: 'データがありません。',
     autoRefresh: '自動更新',
-    manualRefresh: '手動更新'
+    manualRefresh: '今すぐ更新'
   },
   cn: {
-    title: '变压器(TR)温度综合监控',
-    detailed: '详细分析',
+    title: '变压器温度监控',
+    detailed: '详细',
     cloud: '云模式',
-    local: '本地模式',
+    local: '本地',
     records: '记录',
     all: '全部',
     year: '年',
     month: '月',
     export: '导出',
-    loading: '数据加载中...',
+    loading: '加载中...',
     avgTemp: '平均温度',
-    hotSpot: '最高温度点',
-    monitored: '监控对象',
+    hotSpot: '最高温度',
+    monitored: '监控中',
     status: '系统状态',
     normal: '正常',
     warning: '注意',
     alarm: '报警',
-    noTrSelected: '未选择变压器。请从侧边栏选择。',
-    noData: '没有可显示的数据。',
+    noTrSelected: '请选择变压器。',
+    noData: '暂无数据。',
     autoRefresh: '自动刷新',
     manualRefresh: '手动刷新'
   }
 };
 
 const App: React.FC = () => {
-  // --- State Declarations ---
   const [language, setLanguage] = useState<'ko' | 'en' | 'jp' | 'cn'>(() => {
     return (localStorage.getItem('tr_monitor_lang') as any) || 'ko';
   });
@@ -131,47 +129,22 @@ const App: React.FC = () => {
   const [endMonth, setEndMonth] = useState<string>('All');
   
   const [customLabels, setCustomLabels] = useState<Record<string, string>>(() => {
-    if (typeof window !== 'undefined') {
-        try {
-            const saved = localStorage.getItem('transformer_custom_labels');
-            return saved ? JSON.parse(saved) : {};
-        } catch { return {}; }
-    }
-    return {};
+    try {
+      const saved = localStorage.getItem('transformer_custom_labels');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
   });
 
   const [csvUrl, setCsvUrl] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('transformer_monitor_url') || DEFAULT_SHEET_URL;
-    }
-    return DEFAULT_SHEET_URL;
+    return localStorage.getItem('transformer_monitor_url') || DEFAULT_SHEET_URL;
   });
 
-  // Save language preference
-  useEffect(() => {
-    localStorage.setItem('tr_monitor_lang', language);
-  }, [language]);
+  useEffect(() => { localStorage.setItem('tr_monitor_lang', language); }, [language]);
 
-  // --- Derived State ---
-  const displayTransformers = useMemo(() => {
-    return transformers.map(t => ({
-        ...t,
-        name: customLabels[t.id] || t.name
-    }));
-  }, [transformers, customLabels]);
+  const displayTransformers = useMemo(() => transformers.map(tr => ({ ...tr, name: customLabels[tr.id] || tr.name })), [transformers, customLabels]);
+  const singleSelectedTr = useMemo(() => displayTransformers.find(tr => tr.id === focusedId), [displayTransformers, focusedId]);
+  const transformersToDisplay = useMemo(() => focusedId ? displayTransformers.filter(tr => tr.id === focusedId) : displayTransformers.filter(tr => selectedTRs.includes(tr.id)), [displayTransformers, selectedTRs, focusedId]);
 
-  const singleSelectedTr = useMemo(() => {
-    return displayTransformers.find(tr => tr.id === focusedId);
-  }, [displayTransformers, focusedId]);
-
-  const transformersToDisplay = useMemo(() => {
-    if (focusedId) {
-      return displayTransformers.filter(tr => tr.id === focusedId);
-    }
-    return displayTransformers.filter(tr => selectedTRs.includes(tr.id));
-  }, [displayTransformers, selectedTRs, focusedId]);
-
-  // --- Handlers & Effects ---
   const handleLabelChange = (id: string, newLabel: string) => {
     setCustomLabels(prev => {
         const next = { ...prev, [id]: newLabel };
@@ -182,52 +155,20 @@ const App: React.FC = () => {
 
   const updateTransformersFromData = (dataPoints: TransformerDataPoint[]) => {
     if (dataPoints.length === 0) return;
-    const sample = dataPoints[0];
-    const keys = Object.keys(sample).filter(k => k !== 'timestamp');
-    keys.sort((a, b) => {
-        const numA = parseInt(a.replace(/[^0-9]/g, ''));
-        const numB = parseInt(b.replace(/[^0-9]/g, ''));
-        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-        return a.localeCompare(b);
-    });
-
-    const newConfigs: TransformerConfig[] = keys.map((key, index) => {
-        const palette = CHART_PALETTE[index % CHART_PALETTE.length];
-        return {
-            id: key,
-            name: key,
-            color: palette.color,
-            fillColor: palette.fillColor
-        };
-    });
-
+    const keys = Object.keys(dataPoints[0]).filter(k => k !== 'timestamp');
+    keys.sort((a, b) => parseInt(a.replace(/[^0-9]/g, '')) - parseInt(b.replace(/[^0-9]/g, '')));
+    const newConfigs: TransformerConfig[] = keys.map((key, index) => ({ id: key, name: key, color: CHART_PALETTE[index % CHART_PALETTE.length].color, fillColor: CHART_PALETTE[index % CHART_PALETTE.length].fillColor }));
     setTransformers(newConfigs);
-    setSelectedTRs(prev => {
-        if (prev.length === 0) return newConfigs.map(c => c.id);
-        const existingIds = prev.filter(id => keys.includes(id));
-        return existingIds.length > 0 ? existingIds : newConfigs.map(c => c.id);
-    });
+    setSelectedTRs(prev => prev.length > 0 ? prev.filter(id => keys.includes(id)) : newConfigs.map(c => c.id));
   };
 
   const loadCloudData = async (isBackground = false) => {
-    if (!isBackground) setIsLoading(true);
-    else setIsValidating(true);
-    setError(null);
+    if (!isBackground) setIsLoading(true); else setIsValidating(true);
     setDataSource('cloud');
     try {
       const result = await fetchTransformerData(csvUrl);
-      if (result.length === 0) {
-        if (!isBackground) setError("Data is empty");
-      } else {
-        setData(result);
-        updateTransformersFromData(result);
-      }
-    } catch (e) {
-      if (!isBackground) setError("Failed to fetch data");
-    } finally {
-      if (!isBackground) setIsLoading(false);
-      else setIsValidating(false);
-    }
+      if (result.length > 0) { setData(result); updateTransformersFromData(result); setError(null); }
+    } catch (e) { if (!isBackground) setError("Load Error"); } finally { setIsLoading(false); setIsValidating(false); }
   };
 
   const handleFileUpload = (file: File) => {
@@ -236,15 +177,7 @@ const App: React.FC = () => {
       const text = e.target?.result;
       if (typeof text === 'string') {
         const result = parseCSVData(text);
-        if (result.length > 0) {
-          setData(result);
-          updateTransformersFromData(result);
-          setDataSource('local');
-          setError(null);
-          setIsAutoRefresh(false);
-        } else {
-          setError("No valid data found in CSV");
-        }
+        if (result.length > 0) { setData(result); updateTransformersFromData(result); setDataSource('local'); setIsAutoRefresh(false); }
       }
     };
     reader.readAsText(file);
@@ -254,39 +187,24 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let interval: any;
-    if (dataSource === 'cloud' && isAutoRefresh) {
-      interval = setInterval(() => loadCloudData(true), 30000);
-    }
-    return () => { if (interval) clearInterval(interval); };
+    if (dataSource === 'cloud' && isAutoRefresh) interval = setInterval(() => loadCloudData(true), 30000);
+    return () => clearInterval(interval);
   }, [dataSource, isAutoRefresh, csvUrl]);
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
-    data.forEach(d => {
-        try { const y = new Date(d.timestamp).getFullYear().toString(); if (y !== 'NaN') years.add(y); } catch {}
-    });
+    data.forEach(d => { try { const y = new Date(d.timestamp).getFullYear().toString(); if (y !== 'NaN') years.add(y); } catch {} });
     return Array.from(years).sort().reverse();
   }, [data]);
 
   const filteredData = useMemo(() => {
     return data.filter(d => {
         const date = new Date(d.timestamp);
-        const y = date.getFullYear();
-        const m = date.getMonth() + 1;
+        const y = date.getFullYear(); const m = date.getMonth() + 1;
         const val = y * 12 + (m - 1);
-        let startVal = -Infinity;
-        if (startYear !== 'All') {
-            const sy = parseInt(startYear);
-            const sm = startMonth === 'All' ? 1 : parseInt(startMonth);
-            startVal = sy * 12 + (sm - 1);
-        }
-        let endVal = Infinity;
-        if (endYear !== 'All') {
-            const ey = parseInt(endYear);
-            const em = endMonth === 'All' ? 12 : parseInt(endMonth);
-            endVal = ey * 12 + (em - 1);
-        }
-        return val >= startVal && val <= endVal;
+        let sVal = -Infinity; if (startYear !== 'All') sVal = parseInt(startYear) * 12 + (startMonth === 'All' ? 0 : parseInt(startMonth) - 1);
+        let eVal = Infinity; if (endYear !== 'All') eVal = parseInt(endYear) * 12 + (endMonth === 'All' ? 11 : parseInt(endMonth) - 1);
+        return val >= sVal && val <= eVal;
     });
   }, [data, startYear, startMonth, endYear, endMonth]);
 
@@ -297,57 +215,38 @@ const App: React.FC = () => {
     const trIds = transformers.map(tr => tr.id);
     const validValuesNow = trIds.map(id => lastRow[id]).filter((v): v is number => typeof v === 'number');
     const validValuesPrev = prevRow ? trIds.map(id => prevRow[id]).filter((v): v is number => typeof v === 'number') : [];
-    const avgNow = validValuesNow.length > 0 ? validValuesNow.reduce((a, b) => a + b, 0) / validValuesNow.length : 0;
-    const avgPrev = validValuesPrev.length > 0 ? validValuesPrev.reduce((a, b) => a + b, 0) / validValuesPrev.length : 0;
+    const avgNow = validValuesNow.reduce((a, b) => a + b, 0) / (validValuesNow.length || 1);
+    const avgPrev = validValuesPrev.reduce((a, b) => a + b, 0) / (validValuesPrev.length || 1);
     let maxTemp = -Infinity; let maxTrId = '';
-    trIds.forEach(id => {
-      const val = lastRow[id];
-      if (typeof val === 'number' && val > maxTemp) { maxTemp = val; maxTrId = id; }
-    });
+    trIds.forEach(id => { const v = lastRow[id]; if (typeof v === 'number' && v > maxTemp) { maxTemp = v; maxTrId = id; } });
     const maxTrName = maxTrId ? (displayTransformers.find(tr => tr.id === maxTrId)?.name || maxTrId) : 'N/A';
-    const warningCount = trIds.filter(id => { const val = lastRow[id]; return typeof val === 'number' && val > 60; }).length;
-    return { avgNow, avgDelta: prevRow ? avgNow - avgPrev : 0, maxTemp: maxTemp === -Infinity ? null : maxTemp, maxTrName, activeCount: validValuesNow.length, warningCount };
+    const warningCount = trIds.filter(id => (lastRow[id] as number) > 60).length;
+    return { avgNow, avgDelta: avgNow - avgPrev, maxTemp: maxTemp === -Infinity ? 0 : maxTemp, maxTrName, activeCount: validValuesNow.length, warningCount };
   }, [filteredData, transformers, displayTransformers]);
 
   const handleExportCSV = () => {
     if (filteredData.length === 0) return;
     const headers = Object.keys(filteredData[0]);
-    const csvContent = [
-      headers.join(','),
-      ...filteredData.map(row => headers.map(h => {
-          const val = row[h];
-          return typeof val === 'string' && val.includes(',') ? `"${val}"` : val;
-      }).join(','))
-    ].join('\n');
-
+    const csvContent = [headers.join(','), ...filteredData.map(row => headers.map(h => row[h]).join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `tr_monitor_export_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
+    link.href = URL.createObjectURL(blob);
+    link.download = `tr_data_${new Date().toISOString().slice(0,10)}.csv`;
     link.click();
-    document.body.removeChild(link);
   };
 
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-[#0E1117] text-[#FAFAFA] font-sans overflow-hidden">
       <Sidebar 
-          transformers={displayTransformers}
-          selectedIds={selectedTRs}
+          transformers={displayTransformers} selectedIds={selectedTRs}
           onToggle={(id) => setSelectedTRs(prev => prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id])}
-          onSelectAll={() => setSelectedTRs(transformers.map(tr => tr.id))}
-          onDeselectAll={() => setSelectedTRs([])}
-          onFileUpload={handleFileUpload}
-          currentUrl={csvUrl}
-          onUrlChange={(newUrl) => { setCsvUrl(newUrl); localStorage.setItem('transformer_monitor_url', newUrl); setTimeout(() => loadCloudData(false), 100); }}
-          onLabelChange={handleLabelChange}
-          isOpen={isSidebarOpen}
-          setIsOpen={setIsSidebarOpen}
-          language={language}
+          onSelectAll={() => setSelectedTRs(transformers.map(tr => tr.id))} onDeselectAll={() => setSelectedTRs([])}
+          onFileUpload={handleFileUpload} currentUrl={csvUrl}
+          onUrlChange={(url) => { setCsvUrl(url); localStorage.setItem('transformer_monitor_url', url); loadCloudData(); }}
+          onLabelChange={handleLabelChange} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} language={language}
       />
 
-      <main className="flex-1 p-4 lg:p-6 overflow-y-auto relative flex flex-col h-screen transition-all duration-300 ease-in-out">
+      <main className="flex-1 p-4 lg:p-6 overflow-y-auto relative flex flex-col h-screen transition-all duration-300">
         <div className="shrink-0 mb-6">
             <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-3">
                 <div className="flex flex-col gap-1">
@@ -363,18 +262,10 @@ const App: React.FC = () => {
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-2 justify-end w-full xl:w-auto">
-                    {/* Language Selector */}
                     <div className="flex items-center gap-2 bg-[#262730] border border-[#464B5C] px-2 py-1.5 rounded-lg shadow-sm">
                         <Languages size={14} className="text-blue-400" />
-                        <select 
-                          value={language} 
-                          onChange={(e) => setLanguage(e.target.value as any)}
-                          className="bg-transparent text-xs font-bold text-gray-300 focus:outline-none cursor-pointer uppercase tracking-widest hover:text-white"
-                        >
-                          <option value="ko" className="text-black">KR</option>
-                          <option value="en" className="text-black">EN</option>
-                          <option value="jp" className="text-black">JP</option>
-                          <option value="cn" className="text-black">CN</option>
+                        <select value={language} onChange={(e) => setLanguage(e.target.value as any)} className="bg-transparent text-xs font-bold text-gray-300 outline-none cursor-pointer uppercase">
+                          <option value="ko" className="text-black">KR</option><option value="en" className="text-black">EN</option><option value="jp" className="text-black">JP</option><option value="cn" className="text-black">CN</option>
                         </select>
                     </div>
 
@@ -382,24 +273,24 @@ const App: React.FC = () => {
                     
                     <div className="flex items-center gap-1.5 bg-[#262730] p-1 rounded-lg border border-[#464B5C] text-xs">
                         <div className="flex items-center">
-                          <select value={startYear} onChange={(e) => setStartYear(e.target.value)} className="bg-transparent text-[#FAFAFA] border-none focus:ring-0 outline-none p-1 cursor-pointer hover:text-blue-400">
+                          <select value={startYear} onChange={(e) => setStartYear(e.target.value)} className="bg-transparent text-[#FAFAFA] outline-none p-1 cursor-pointer">
                             <option value="All" className="text-black">{t.all}</option>
                             {availableYears.map(y => <option key={y} value={y} className="text-black">{y}{t.year}</option>)}
                           </select>
-                          <span className="text-gray-500">.</span>
-                          <select value={startMonth} onChange={(e) => setStartMonth(e.target.value)} className="bg-transparent text-[#FAFAFA] border-none focus:ring-0 outline-none p-1 cursor-pointer hover:text-blue-400">
+                          <span className="text-gray-500 mx-0.5">.</span>
+                          <select value={startMonth} onChange={(e) => setStartMonth(e.target.value)} className="bg-transparent text-[#FAFAFA] outline-none p-1 cursor-pointer">
                             <option value="All" className="text-black">{t.all}</option>
                             {Array.from({length: 12}, (_, i) => i + 1).map(m => (<option key={m} value={m.toString()} className="text-black">{m}{t.month}</option>))}
                           </select>
                         </div>
                         <span className="text-gray-500 px-1">~</span>
                         <div className="flex items-center">
-                          <select value={endYear} onChange={(e) => setEndYear(e.target.value)} className="bg-transparent text-[#FAFAFA] border-none focus:ring-0 outline-none p-1 cursor-pointer hover:text-blue-400">
+                          <select value={endYear} onChange={(e) => setEndYear(e.target.value)} className="bg-transparent text-[#FAFAFA] outline-none p-1 cursor-pointer">
                             <option value="All" className="text-black">{t.all}</option>
                             {availableYears.map(y => <option key={y} value={y} className="text-black">{y}{t.year}</option>)}
                           </select>
-                          <span className="text-gray-500">.</span>
-                          <select value={endMonth} onChange={(e) => setEndMonth(e.target.value)} className="bg-transparent text-[#FAFAFA] border-none focus:ring-0 outline-none p-1 cursor-pointer hover:text-blue-400">
+                          <span className="text-gray-500 mx-0.5">.</span>
+                          <select value={endMonth} onChange={(e) => setEndMonth(e.target.value)} className="bg-transparent text-[#FAFAFA] outline-none p-1 cursor-pointer">
                             <option value="All" className="text-black">{t.all}</option>
                             {Array.from({length: 12}, (_, i) => i + 1).map(m => (<option key={m} value={m.toString()} className="text-black">{m}{t.month}</option>))}
                           </select>
@@ -417,19 +308,10 @@ const App: React.FC = () => {
                     
                     {dataSource === 'cloud' && (
                         <div className="flex items-center gap-1">
-                            <button 
-                              onClick={() => setIsAutoRefresh(!isAutoRefresh)} 
-                              className={`flex items-center justify-center w-8 h-8 rounded transition-colors border ${isAutoRefresh ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-500' : 'bg-[#262730] border-[#464B5C] text-gray-400 hover:text-gray-200'}`}
-                              title={t.autoRefresh}
-                            >
+                            <button onClick={() => setIsAutoRefresh(!isAutoRefresh)} className={`w-8 h-8 rounded border transition-colors flex items-center justify-center ${isAutoRefresh ? 'bg-yellow-500/20 border-yellow-500 text-yellow-500' : 'bg-[#262730] border-[#464B5C] text-gray-400'}`} title={t.autoRefresh}>
                               {isAutoRefresh ? <Pause size={14} /> : <Play size={14} />}
                             </button>
-                            <button 
-                              onClick={() => loadCloudData(false)} 
-                              disabled={isLoading || isValidating} 
-                              className="w-8 h-8 bg-[#262730] hover:bg-[#363945] border border-[#464B5C] rounded flex items-center justify-center disabled:opacity-50"
-                              title={t.manualRefresh}
-                            >
+                            <button onClick={() => loadCloudData(false)} disabled={isLoading || isValidating} className="w-8 h-8 bg-[#262730] hover:bg-[#363945] border border-[#464B5C] rounded flex items-center justify-center disabled:opacity-50">
                                 {(isLoading || isValidating) ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                             </button>
                         </div>
@@ -441,8 +323,6 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
             {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 text-gray-500"><Loader2 size={48} className="animate-spin mb-4 text-blue-500" /><p>{t.loading}</p></div>
-            ) : error ? (
-                <div className="bg-red-900/20 border border-red-800 text-red-200 p-6 rounded-lg text-center mb-8"><p className="font-bold mb-2">Error</p><p className="text-sm opacity-90 mb-4">{error}</p></div>
             ) : (
                 <>
                     {systemKPIs && (
@@ -450,12 +330,7 @@ const App: React.FC = () => {
                             <KPICard label={t.avgTemp} value={`${systemKPIs.avgNow.toFixed(1)}°C`} delta={`${systemKPIs.avgDelta.toFixed(1)}°C`} deltaColor="inverse" />
                             <KPICard label={t.hotSpot} value={`${systemKPIs.maxTemp?.toFixed(1)}°C`} subtext={systemKPIs.maxTrName} deltaColor="inverse" />
                             <KPICard label={t.monitored} value={`${systemKPIs.activeCount}`} deltaColor="off" />
-                            <KPICard 
-                                label={t.status} 
-                                value={systemKPIs.warningCount === 0 ? t.normal : t.warning} 
-                                subtext={`${t.alarm} ${systemKPIs.warningCount}`} 
-                                deltaColor={systemKPIs.warningCount === 0 ? 'off' : 'inverse'} 
-                            />
+                            <KPICard label={t.status} value={systemKPIs.warningCount === 0 ? t.normal : t.warning} subtext={`${t.alarm} ${systemKPIs.warningCount}`} deltaColor={systemKPIs.warningCount === 0 ? 'off' : 'inverse'} />
                         </div>
                     )}
 
@@ -468,15 +343,11 @@ const App: React.FC = () => {
                         <>
                             {viewMode === 'grid' ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-10">
-                                    {transformersToDisplay.map(tr => (
-                                        <TransformerGridCard key={tr.id} config={tr} data={filteredData} onClick={() => {setFocusedId(tr.id); setViewMode('list');}} />
-                                    ))}
+                                    {transformersToDisplay.map(tr => ( <TransformerGridCard key={tr.id} config={tr} data={filteredData} onClick={() => {setFocusedId(tr.id); setViewMode('list');}} /> ))}
                                 </div>
                             ) : (
                                 <div className="space-y-6 pb-10">
-                                    {transformersToDisplay.map(tr => (
-                                        <TransformerRow key={tr.id} config={tr} data={filteredData} onBack={focusedId ? () => {setFocusedId(null); setViewMode('grid');} : undefined} />
-                                    ))}
+                                    {transformersToDisplay.map(tr => ( <TransformerRow key={tr.id} config={tr} data={filteredData} onBack={focusedId ? () => {setFocusedId(null); setViewMode('grid');} : undefined} /> ))}
                                 </div>
                             )}
                         </>
