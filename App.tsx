@@ -105,61 +105,128 @@ const translations = {
   }
 };
 
+// --- Safe Storage Helpers ---
+function getStorage<T>(key: string, initial: T): T {
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved === null) return initial;
+    if (typeof initial === 'boolean') return (saved === 'true') as any;
+    if (typeof initial === 'string') return saved as any;
+    return JSON.parse(saved);
+  } catch { return initial; }
+}
+
+const setStorage = (key: string, value: any) => {
+  try {
+    if (typeof value === 'string') localStorage.setItem(key, value);
+    else if (typeof value === 'boolean') localStorage.setItem(key, String(value));
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+};
+
 const App: React.FC = () => {
-  const [language, setLanguage] = useState<'ko' | 'en' | 'jp' | 'cn'>(() => {
-    return (localStorage.getItem('tr_monitor_lang') as any) || 'ko';
-  });
+  // --- State Initialization with Persistence ---
+  
+  // 1. Language
+  const [language, setLanguage] = useState<'ko' | 'en' | 'jp' | 'cn'>(() => getStorage<'ko' | 'en' | 'jp' | 'cn'>('tr_monitor_lang', 'ko'));
   const t = translations[language];
 
+  // 2. Auto Refresh & UI States
+  const [isAutoRefresh, setIsAutoRefresh] = useState(() => getStorage('tr_monitor_auto_refresh', false));
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => getStorage('tr_monitor_sidebar_open', true));
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+
+  // 3. Selected Transformers (Filtering)
+  const [selectedTRs, setSelectedTRs] = useState<string[]>(() => getStorage<string[]>('tr_monitor_selected_trs', []));
+
+  // 4. Date Filters
+  const [startYear, setStartYear] = useState(() => getStorage('tr_monitor_start_year', 'All'));
+  const [startMonth, setStartMonth] = useState(() => getStorage('tr_monitor_start_month', 'All'));
+  const [endYear, setEndYear] = useState(() => getStorage('tr_monitor_end_year', 'All'));
+  const [endMonth, setEndMonth] = useState(() => getStorage('tr_monitor_end_month', 'All'));
+
+  // 5. Custom Labels & URL
+  const [customLabels, setCustomLabels] = useState<Record<string, string>>(() => getStorage<Record<string, string>>('transformer_custom_labels', {}));
+  const [csvUrl, setCsvUrl] = useState<string>(() => getStorage('transformer_monitor_url', DEFAULT_SHEET_URL));
+
+  // --- Other States ---
   const [data, setData] = useState<TransformerDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<'cloud' | 'local'>('cloud');
-  const [isAutoRefresh, setIsAutoRefresh] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [selectedTRs, setSelectedTRs] = useState<string[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [transformers, setTransformers] = useState<TransformerConfig[]>([]);
-  
-  const [startYear, setStartYear] = useState<string>('All');
-  const [startMonth, setStartMonth] = useState<string>('All');
-  const [endYear, setEndYear] = useState<string>('All');
-  const [endMonth, setEndMonth] = useState<string>('All');
-  
-  const [customLabels, setCustomLabels] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem('transformer_custom_labels');
-      return saved ? JSON.parse(saved) : {};
-    } catch { return {}; }
-  });
 
-  const [csvUrl, setCsvUrl] = useState<string>(() => {
-    return localStorage.getItem('transformer_monitor_url') || DEFAULT_SHEET_URL;
-  });
+  // --- Persistence Effects (Save on Change) ---
+  useEffect(() => setStorage('tr_monitor_lang', language), [language]);
+  useEffect(() => setStorage('tr_monitor_auto_refresh', isAutoRefresh), [isAutoRefresh]);
+  useEffect(() => setStorage('tr_monitor_sidebar_open', isSidebarOpen), [isSidebarOpen]);
+  useEffect(() => setStorage('tr_monitor_start_year', startYear), [startYear]);
+  useEffect(() => setStorage('tr_monitor_start_month', startMonth), [startMonth]);
+  useEffect(() => setStorage('tr_monitor_end_year', endYear), [endYear]);
+  useEffect(() => setStorage('tr_monitor_end_month', endMonth), [endMonth]);
+  useEffect(() => setStorage('transformer_custom_labels', customLabels), [customLabels]);
+  useEffect(() => setStorage('transformer_monitor_url', csvUrl), [csvUrl]);
 
-  useEffect(() => { localStorage.setItem('tr_monitor_lang', language); }, [language]);
+  useEffect(() => {
+    // Only save selection if we have data to validate against, preventing overwrite with empty
+    if (transformers.length > 0) {
+       setStorage('tr_monitor_selected_trs', selectedTRs);
+    }
+  }, [selectedTRs, transformers]);
 
+
+  // --- Logic ---
   const displayTransformers = useMemo(() => transformers.map(tr => ({ ...tr, name: customLabels[tr.id] || tr.name })), [transformers, customLabels]);
   const singleSelectedTr = useMemo(() => displayTransformers.find(tr => tr.id === focusedId), [displayTransformers, focusedId]);
-  const transformersToDisplay = useMemo(() => focusedId ? displayTransformers.filter(tr => tr.id === focusedId) : displayTransformers.filter(tr => selectedTRs.includes(tr.id)), [displayTransformers, selectedTRs, focusedId]);
+  
+  const transformersToDisplay = useMemo(() => {
+      if (focusedId) {
+          return displayTransformers.filter(tr => tr.id === focusedId);
+      }
+      return displayTransformers.filter(tr => selectedTRs.includes(tr.id));
+  }, [displayTransformers, selectedTRs, focusedId]);
 
   const handleLabelChange = (id: string, newLabel: string) => {
-    setCustomLabels(prev => {
-        const next = { ...prev, [id]: newLabel };
-        localStorage.setItem('transformer_custom_labels', JSON.stringify(next));
-        return next;
-    });
+    setCustomLabels(prev => ({ ...prev, [id]: newLabel }));
   };
 
   const updateTransformersFromData = (dataPoints: TransformerDataPoint[]) => {
     if (dataPoints.length === 0) return;
     const keys = Object.keys(dataPoints[0]).filter(k => k !== 'timestamp');
-    keys.sort((a, b) => parseInt(a.replace(/[^0-9]/g, '')) - parseInt(b.replace(/[^0-9]/g, '')));
-    const newConfigs: TransformerConfig[] = keys.map((key, index) => ({ id: key, name: key, color: CHART_PALETTE[index % CHART_PALETTE.length].color, fillColor: CHART_PALETTE[index % CHART_PALETTE.length].fillColor }));
+    
+    keys.sort((a, b) => {
+        const numA = parseInt(a.replace(/[^0-9]/g, ''));
+        const numB = parseInt(b.replace(/[^0-9]/g, ''));
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+    });
+
+    const newConfigs: TransformerConfig[] = keys.map((key, index) => ({ 
+        id: key, 
+        name: key, 
+        color: CHART_PALETTE[index % CHART_PALETTE.length].color, 
+        fillColor: CHART_PALETTE[index % CHART_PALETTE.length].fillColor 
+    }));
+    
     setTransformers(newConfigs);
-    setSelectedTRs(prev => prev.length > 0 ? prev.filter(id => keys.includes(id)) : newConfigs.map(c => c.id));
+
+    // Smart Selection Persistence Logic
+    setSelectedTRs(prev => {
+        // If it's a fresh load (prev empty), or keys changed, we need to decide what to select.
+        // If prev is empty, it usually means "First Load" -> Select All.
+        if (prev.length === 0) {
+            return newConfigs.map(c => c.id);
+        }
+        
+        // If we have a saved selection, filter out any IDs that no longer exist in the new data
+        const validIds = prev.filter(id => keys.includes(id));
+        
+        // If we still have valid selections, keep them.
+        // If validIds became empty (e.g. data schema completely changed), fallback to All.
+        return validIds.length > 0 ? validIds : newConfigs.map(c => c.id);
+    });
   };
 
   const loadCloudData = async (isBackground = false) => {
@@ -242,7 +309,7 @@ const App: React.FC = () => {
           onToggle={(id) => setSelectedTRs(prev => prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id])}
           onSelectAll={() => setSelectedTRs(transformers.map(tr => tr.id))} onDeselectAll={() => setSelectedTRs([])}
           onFileUpload={handleFileUpload} currentUrl={csvUrl}
-          onUrlChange={(url) => { setCsvUrl(url); localStorage.setItem('transformer_monitor_url', url); loadCloudData(); }}
+          onUrlChange={(url) => { setCsvUrl(url); loadCloudData(); }}
           onLabelChange={handleLabelChange} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} language={language}
       />
 
