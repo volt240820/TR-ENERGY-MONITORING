@@ -8,7 +8,9 @@ import TransformerGridCard from './components/TransformerGridCard';
 import WeatherWidget from './components/WeatherWidget';
 import { Zap, Activity, Loader2, RefreshCw, Play, Pause, LayoutGrid, List, Download, Database, Languages, DollarSign, X } from 'lucide-react';
 
-const DEFAULT_SHEET_URL = `https://docs.google.com/spreadsheets/d/1K8w405s3SthSLFbYdYT1PAnpnuzGMUOl0qxQDSiCKs8/export?format=csv&gid=69853061`;
+// Default URL is empty to keep the input clean for users.
+// If empty, the fetcher falls back to the internal demo data URL automatically.
+const DEFAULT_SHEET_URL = "";
 
 const translations = {
   ko: {
@@ -246,7 +248,8 @@ const App: React.FC = () => {
     setDataSource('cloud');
     
     // Use targetUrl if provided, otherwise fall back to state csvUrl
-    const urlToFetch = targetUrl || csvUrl;
+    // We strictly check for string type to allow empty string (user clearing input) to be passed correctly
+    const urlToFetch = typeof targetUrl === 'string' ? targetUrl : csvUrl;
 
     try {
       const result = await fetchTransformerData(urlToFetch);
