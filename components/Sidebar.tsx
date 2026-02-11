@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { TransformerConfig } from '../types';
-import { Filter, Upload, FileSpreadsheet, Link as LinkIcon, Check, Pencil, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
+import { Filter, Upload, FileSpreadsheet, Link as LinkIcon, Check, Pencil, ChevronLeft, ChevronRight, Zap, Lock, Unlock } from 'lucide-react';
 
 interface SidebarProps {
   transformers: TransformerConfig[];
@@ -25,7 +25,9 @@ const sidebarTranslations = {
     all: '전체',
     none: '해제',
     status: '시스템 상태',
-    secure: '안전'
+    secure: '안전',
+    locked: '잠김 (수정하려면 자물쇠 클릭)',
+    unlocked: '수정 가능'
   },
   en: {
     source: 'DATA SOURCE',
@@ -34,7 +36,9 @@ const sidebarTranslations = {
     all: 'ALL',
     none: 'NONE',
     status: 'SYSTEM STATUS',
-    secure: 'SECURE'
+    secure: 'SECURE',
+    locked: 'Locked (Click lock to edit)',
+    unlocked: 'Editable'
   },
   jp: {
     source: 'データソース',
@@ -43,7 +47,9 @@ const sidebarTranslations = {
     all: '全選択',
     none: '解除',
     status: 'システム状態',
-    secure: '安全'
+    secure: '安全',
+    locked: 'ロック中',
+    unlocked: '編集可能'
   },
   cn: {
     source: '数据源',
@@ -52,7 +58,9 @@ const sidebarTranslations = {
     all: '全选',
     none: '重置',
     status: '系统状态',
-    secure: '安全'
+    secure: '安全',
+    locked: '已锁定',
+    unlocked: '可编辑'
   }
 };
 
@@ -73,13 +81,22 @@ const Sidebar: React.FC<SidebarProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [tempUrl, setTempUrl] = useState(currentUrl);
   const [isUrlSaved, setIsUrlSaved] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  // Initialize locked state: if URL is present, lock it. If empty, start unlocked for quick entry.
+  const [isSourceLocked, setIsSourceLocked] = useState(!!currentUrl); 
+  const [isEditingLabels, setIsEditingLabels] = useState(false);
   const t = sidebarTranslations[language];
 
-  const handleUrlApply = () => {
+  const handleUrlSave = () => {
     onUrlChange(tempUrl);
     setIsUrlSaved(true);
+    setIsSourceLocked(true); // Auto-lock after save
     setTimeout(() => setIsUrlSaved(false), 2000);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleUrlSave();
+    }
   };
 
   return (
@@ -95,14 +112,56 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="mb-8 shrink-0">
-          <h2 className="text-[#FAFAFA] text-xs font-bold flex items-center gap-2 mb-3 uppercase tracking-widest opacity-80"><FileSpreadsheet size={14} /> {t.source}</h2>
+          <div className="flex items-center justify-between mb-3">
+             <h2 className="text-[#FAFAFA] text-xs font-bold flex items-center gap-2 uppercase tracking-widest opacity-80">
+                <FileSpreadsheet size={14} /> {t.source}
+             </h2>
+             <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${isSourceLocked ? 'bg-gray-700 text-gray-400' : 'bg-green-500/20 text-green-400'}`}>
+               {isSourceLocked ? 'LOCKED' : 'EDIT'}
+             </span>
+          </div>
+          
           <div className="space-y-3">
               <div className="flex gap-1">
-                  <input type="text" value={tempUrl} onChange={(e) => setTempUrl(e.target.value)} placeholder="CSV URL..." className="w-full bg-[#1e1e1e] border border-[#464B5C] text-gray-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500" />
-                  <button onClick={handleUrlApply} className={`px-2 rounded text-white transition-colors ${isUrlSaved ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-500'}`}>{isUrlSaved ? <Check size={14} /> : <LinkIcon size={14} />}</button>
+                  <input 
+                    type="text" 
+                    value={tempUrl} 
+                    onChange={(e) => setTempUrl(e.target.value)}
+                    onKeyDown={handleKeyDown} 
+                    disabled={isSourceLocked}
+                    placeholder="CSV URL..." 
+                    title={isSourceLocked ? t.locked : t.unlocked}
+                    className={`w-full border text-xs rounded px-2 py-1.5 focus:outline-none transition-colors ${
+                      isSourceLocked 
+                        ? 'bg-[#1e1e1e]/50 border-[#464B5C]/50 text-gray-500 cursor-not-allowed select-none' 
+                        : 'bg-[#1e1e1e] border-blue-500 text-gray-200 focus:border-blue-400'
+                    }`} 
+                  />
+                  {isSourceLocked ? (
+                    <button 
+                      onClick={() => setIsSourceLocked(false)} 
+                      className="px-2 rounded bg-[#464B5C] hover:bg-[#5a6075] text-gray-300 transition-colors"
+                      title="클릭하여 잠금 해제"
+                    >
+                      <Lock size={14} />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={handleUrlSave} 
+                      className={`px-2 rounded text-white transition-colors ${isUrlSaved ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-500'}`}
+                      title="저장"
+                    >
+                      {isUrlSaved ? <Check size={14} /> : <Check size={14} />}
+                    </button>
+                  )}
               </div>
-              <input type="file" accept=".csv" ref={fileInputRef} onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])} className="hidden" />
-              <button onClick={() => fileInputRef.current?.click()} className="w-full bg-[#464B5C] hover:bg-[#5a6075] text-white text-xs font-bold py-1.5 px-3 rounded flex items-center justify-center gap-2 uppercase tracking-tighter"><Upload size={14} /> {t.upload}</button>
+              
+              {!isSourceLocked && (
+                <div className="animate-fade-in">
+                    <input type="file" accept=".csv" ref={fileInputRef} onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])} className="hidden" />
+                    <button onClick={() => fileInputRef.current?.click()} className="w-full bg-[#464B5C] hover:bg-[#5a6075] text-white text-xs font-bold py-1.5 px-3 rounded flex items-center justify-center gap-2 uppercase tracking-tighter"><Upload size={14} /> {t.upload}</button>
+                </div>
+              )}
           </div>
         </div>
 
@@ -110,7 +169,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex justify-between items-center mb-3 shrink-0">
               <div className="flex items-center gap-2">
                   <h2 className="text-[#FAFAFA] text-xs font-bold flex items-center gap-2 uppercase tracking-widest opacity-80"><Filter size={14} /> {t.filtering}</h2>
-                  <button onClick={() => setIsEditing(!isEditing)} className={`p-1 rounded transition-colors ${isEditing ? 'text-green-400 bg-green-400/10' : 'text-gray-400 hover:bg-[#363945]'}`}>{isEditing ? <Check size={12} /> : <Pencil size={12} />}</button>
+                  <button onClick={() => setIsEditingLabels(!isEditingLabels)} className={`p-1 rounded transition-colors ${isEditingLabels ? 'text-green-400 bg-green-400/10' : 'text-gray-400 hover:bg-[#363945]'}`}>{isEditingLabels ? <Check size={12} /> : <Pencil size={12} />}</button>
               </div>
               <div className="flex gap-2">
                 <button onClick={onSelectAll} className="text-[10px] text-blue-400 hover:text-blue-300 font-black uppercase">{t.all}</button>
@@ -125,16 +184,16 @@ const Sidebar: React.FC<SidebarProps> = ({
               return (
                   <div 
                     key={tr.id} 
-                    className={`relative flex items-center justify-center rounded border text-[11px] transition-all text-center min-h-[40px] cursor-pointer overflow-hidden ${isSelected ? 'text-white font-black' : 'bg-[#1e1e1e] text-gray-500 border-[#464B5C] hover:border-gray-400'}`} 
+                    className={`relative flex items-center justify-center rounded border text-sm transition-all text-center min-h-[48px] cursor-pointer overflow-hidden ${isSelected ? 'text-white font-bold' : 'bg-[#1e1e1e] text-gray-500 border-[#464B5C] hover:border-gray-400'}`} 
                     style={isSelected ? { backgroundColor: tr.fillColor.replace('0.2', '0.75'), borderColor: tr.color } : {}} 
-                    onClick={() => !isEditing && onToggle(tr.id)}
+                    onClick={() => !isEditingLabels && onToggle(tr.id)}
                   >
-                      {isEditing ? (
+                      {isEditingLabels ? (
                           <input type="text" value={tr.name} onChange={(e) => onLabelChange(tr.id, e.target.value)} className="w-full h-full bg-transparent text-center focus:outline-none text-white font-bold" autoFocus />
                       ) : (
-                          <div className="truncate px-1 uppercase tracking-tighter">{displayName}</div>
+                          <div className="truncate px-1 uppercase tracking-tight leading-tight">{displayName}</div>
                       )}
-                      {isSelected && !isEditing && (
+                      {isSelected && !isEditingLabels && (
                           <div className="absolute top-0 right-0 p-0.5">
                               <Check size={8} className="text-white opacity-60" />
                           </div>
