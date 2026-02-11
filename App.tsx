@@ -6,7 +6,7 @@ import KPICard from './components/KPICard';
 import TransformerRow from './components/TransformerRow';
 import TransformerGridCard from './components/TransformerGridCard';
 import WeatherWidget from './components/WeatherWidget';
-import { Zap, Activity, Loader2, RefreshCw, Play, Pause, LayoutGrid, List, Download, Database, Languages } from 'lucide-react';
+import { Zap, Activity, Loader2, RefreshCw, Play, Pause, LayoutGrid, List, Download, Database, Languages, DollarSign, X } from 'lucide-react';
 
 const DEFAULT_SHEET_URL = `https://docs.google.com/spreadsheets/d/1K8w405s3SthSLFbYdYT1PAnpnuzGMUOl0qxQDSiCKs8/export?format=csv&gid=69853061`;
 
@@ -32,7 +32,8 @@ const translations = {
     noTrSelected: '선택된 변압기가 없습니다. 왼쪽 사이드바에서 선택해 주세요.',
     noData: '표시할 데이터가 없습니다.',
     autoRefresh: '자동 갱신',
-    manualRefresh: '수동 갱신'
+    manualRefresh: '수동 갱신',
+    adPlaceholder: '광고 배너 영역 (Google AdSense 등)'
   },
   en: {
     title: 'Transformer Temp Monitor',
@@ -55,7 +56,8 @@ const translations = {
     noTrSelected: 'No transformers selected.',
     noData: 'No data available.',
     autoRefresh: 'Auto Refresh',
-    manualRefresh: 'Refresh Now'
+    manualRefresh: 'Refresh Now',
+    adPlaceholder: 'Advertisement Space (AdSense, etc.)'
   },
   jp: {
     title: '変圧器温度監視',
@@ -78,7 +80,8 @@ const translations = {
     noTrSelected: '変圧器を選択してください。',
     noData: 'データがありません。',
     autoRefresh: '自動更新',
-    manualRefresh: '今すぐ更新'
+    manualRefresh: '今すぐ更新',
+    adPlaceholder: '広告スペース'
   },
   cn: {
     title: '变压器温度监控',
@@ -101,7 +104,8 @@ const translations = {
     noTrSelected: '请选择变压器。',
     noData: '暂无数据。',
     autoRefresh: '自动刷新',
-    manualRefresh: '手动刷新'
+    manualRefresh: '手动刷新',
+    adPlaceholder: '广告位'
   }
 };
 
@@ -136,6 +140,7 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => getStorage('tr_monitor_sidebar_open', true));
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [showAd, setShowAd] = useState(true); // 광고 표시 여부 상태
 
   // 3. Selected Transformers (Filtering) - Initialize with null to distinguish first load
   const [selectedTRs, setSelectedTRs] = useState<string[] | null>(() => getStorage<string[] | null>('tr_monitor_selected_trs', null));
@@ -236,11 +241,15 @@ const App: React.FC = () => {
     });
   };
 
-  const loadCloudData = async (isBackground = false) => {
+  const loadCloudData = async (isBackground = false, targetUrl?: string) => {
     if (!isBackground) setIsLoading(true); else setIsValidating(true);
     setDataSource('cloud');
+    
+    // Use targetUrl if provided, otherwise fall back to state csvUrl
+    const urlToFetch = targetUrl || csvUrl;
+
     try {
-      const result = await fetchTransformerData(csvUrl);
+      const result = await fetchTransformerData(urlToFetch);
       if (result.length > 0) { setData(result); updateTransformersFromData(result); setError(null); }
     } catch (e) { if (!isBackground) setError("Load Error"); } finally { setIsLoading(false); setIsValidating(false); }
   };
@@ -319,7 +328,7 @@ const App: React.FC = () => {
           })}
           onSelectAll={() => setSelectedTRs(transformers.map(tr => tr.id))} onDeselectAll={() => setSelectedTRs([])}
           onFileUpload={handleFileUpload} currentUrl={csvUrl}
-          onUrlChange={(url) => { setCsvUrl(url); loadCloudData(); }}
+          onUrlChange={(url) => { setCsvUrl(url); loadCloudData(false, url); }}
           onLabelChange={handleLabelChange} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} language={language}
       />
 
@@ -396,6 +405,40 @@ const App: React.FC = () => {
                 </div>
             </div>
         </div>
+        
+        {/* --- ADVERTISEMENT BANNER AREA --- */}
+        {showAd && (
+            <div className="shrink-0 mb-6 mx-auto w-full max-w-[1600px]">
+                <div className="relative group bg-[#16181d] border border-dashed border-[#464B5C] rounded-lg h-[100px] flex flex-col items-center justify-center overflow-hidden transition-all hover:border-gray-500">
+                    <button 
+                        onClick={() => setShowAd(false)} 
+                        className="absolute top-2 right-2 p-1 text-gray-600 hover:text-gray-300 transition-colors z-10"
+                        title="Close Ad"
+                    >
+                        <X size={12} />
+                    </button>
+                    
+                    {/* Placeholder Content for AdSense */}
+                    <div className="flex flex-col items-center text-center opacity-40 group-hover:opacity-60 transition-opacity">
+                        <div className="flex items-center gap-2 text-yellow-500 mb-1">
+                            <DollarSign size={16} />
+                            <span className="text-[10px] font-mono uppercase tracking-widest font-bold">Advertisement</span>
+                        </div>
+                        <h3 className="text-gray-300 font-bold text-lg">{t.adPlaceholder}</h3>
+                        <p className="text-[10px] text-gray-500 mt-1 font-mono">728x90 Leaderboard or Responsive Display Ad</p>
+                    </div>
+
+                    {/* 
+                        [DEVELOPER NOTE] 
+                        To implement real ads (e.g., Google AdSense):
+                        1. Remove the placeholder div above.
+                        2. Paste your <ins> script here.
+                        3. Ensure the script is loaded in index.html head.
+                    */}
+                </div>
+            </div>
+        )}
+        {/* --- END ADVERTISEMENT --- */}
 
         <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
             {isLoading ? (
