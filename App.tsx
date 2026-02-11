@@ -137,8 +137,8 @@ const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
-  // 3. Selected Transformers (Filtering)
-  const [selectedTRs, setSelectedTRs] = useState<string[]>(() => getStorage<string[]>('tr_monitor_selected_trs', []));
+  // 3. Selected Transformers (Filtering) - Initialize with null to distinguish first load
+  const [selectedTRs, setSelectedTRs] = useState<string[] | null>(() => getStorage<string[] | null>('tr_monitor_selected_trs', null));
 
   // 4. Date Filters
   const [startYear, setStartYear] = useState(() => getStorage('tr_monitor_start_year', 'All'));
@@ -170,8 +170,8 @@ const App: React.FC = () => {
   useEffect(() => setStorage('transformer_monitor_url', csvUrl), [csvUrl]);
 
   useEffect(() => {
-    // Only save selection if we have data to validate against, preventing overwrite with empty
-    if (transformers.length > 0) {
+    // Only save selection if we have data to validate against AND selectedTRs is initialized (not null)
+    if (transformers.length > 0 && selectedTRs !== null) {
        setStorage('tr_monitor_selected_trs', selectedTRs);
     }
   }, [selectedTRs, transformers]);
@@ -185,6 +185,10 @@ const App: React.FC = () => {
       if (focusedId) {
           return displayTransformers.filter(tr => tr.id === focusedId);
       }
+      // If selectedTRs is null (init), default to showing nothing until initialized, or all? 
+      // Actually updateTransformersFromData sets it quickly.
+      if (selectedTRs === null) return [];
+      
       return displayTransformers.filter(tr => selectedTRs.includes(tr.id));
   }, [displayTransformers, selectedTRs, focusedId]);
 
@@ -214,17 +218,20 @@ const App: React.FC = () => {
 
     // Smart Selection Persistence Logic
     setSelectedTRs(prev => {
-        // If it's a fresh load (prev empty), or keys changed, we need to decide what to select.
-        // If prev is empty, it usually means "First Load" -> Select All.
-        if (prev.length === 0) {
+        // If it's a fresh load (prev null), select ALL.
+        if (prev === null) {
             return newConfigs.map(c => c.id);
         }
         
-        // If we have a saved selection, filter out any IDs that no longer exist in the new data
+        // If prev is explicitly empty (user deselected all), keep it empty.
+        if (prev.length === 0) {
+            return [];
+        }
+        
+        // Filter out IDs that no longer exist in the new data
         const validIds = prev.filter(id => keys.includes(id));
         
-        // If we still have valid selections, keep them.
-        // If validIds became empty (e.g. data schema completely changed), fallback to All.
+        // If validIds became empty BUT prev was not empty (keys mismatch), fallback to All.
         return validIds.length > 0 ? validIds : newConfigs.map(c => c.id);
     });
   };
@@ -305,8 +312,11 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-[#0E1117] text-[#FAFAFA] font-sans overflow-hidden">
       <Sidebar 
-          transformers={displayTransformers} selectedIds={selectedTRs}
-          onToggle={(id) => setSelectedTRs(prev => prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id])}
+          transformers={displayTransformers} selectedIds={selectedTRs || []}
+          onToggle={(id) => setSelectedTRs(prev => {
+              const current = prev || [];
+              return current.includes(id) ? current.filter(tid => tid !== id) : [...current, id];
+          })}
           onSelectAll={() => setSelectedTRs(transformers.map(tr => tr.id))} onDeselectAll={() => setSelectedTRs([])}
           onFileUpload={handleFileUpload} currentUrl={csvUrl}
           onUrlChange={(url) => { setCsvUrl(url); loadCloudData(); }}
@@ -404,7 +414,7 @@ const App: React.FC = () => {
                     {transformersToDisplay.length === 0 ? (
                         <div className="text-center py-20 text-gray-500 border border-dashed border-[#464B5C] rounded-lg">
                             <Activity size={48} className="mx-auto mb-4 opacity-50" />
-                            <p>{focusedId || selectedTRs.length > 0 ? t.noData : t.noTrSelected}</p>
+                            <p>{focusedId || (selectedTRs && selectedTRs.length > 0) ? t.noData : t.noTrSelected}</p>
                         </div>
                     ) : (
                         <>
